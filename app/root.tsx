@@ -11,11 +11,13 @@ import {
   ScrollRestoration,
   useLoaderData,
 } from '@remix-run/react';
-import type {Shop} from '@shopify/hydrogen/storefront-api-types';
 import styles from './styles/app.css';
 import favicon from '../public/favicon.svg';
 import {Layout} from './components/Layout';
 import {Seo} from '@shopify/hydrogen';
+
+import {defer} from '@shopify/remix-oxygen';
+import {CART_QUERY} from '~/queries/cart';
 
 export const links: LinksFunction = () => {
   return [
@@ -37,9 +39,29 @@ export const meta: MetaFunction = () => ({
   viewport: 'width=device-width,initial-scale=1',
 });
 
+async function getCart({storefront}: {storefront: any}, cartId: string) {
+  if (!storefront) {
+    throw new Error('missing storefront client in cart query');
+  }
+
+  const {cart} = await storefront.query(CART_QUERY, {
+    variables: {
+      cartId,
+      country: storefront.i18n.country,
+      language: storefront.i18n.language,
+    },
+    cache: storefront.CacheNone(),
+  });
+
+  return cart;
+}
+
 export async function loader({context}: LoaderArgs) {
-  const layout = await context.storefront.query<{shop: Shop}>(LAYOUT_QUERY);
-  return {layout};
+  const cartId = await context.session.get('cartId');
+  return defer({
+    cart: cartId ? getCart(context, cartId) : undefined,
+    layout: await context.storefront.query<any>(LAYOUT_QUERY),
+  });
 }
 
 export default function App() {

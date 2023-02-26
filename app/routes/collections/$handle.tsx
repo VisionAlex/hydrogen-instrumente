@@ -1,11 +1,23 @@
 import {useLoaderData} from '@remix-run/react';
 import {json, LoaderArgs} from '@shopify/remix-oxygen';
+import ProductGrid from '../../components/ProductGrid';
 
-export async function loader({params, context}: LoaderArgs) {
+const seo = ({data}: any) => ({
+  title: data?.collection?.title,
+  description: data?.collection?.description,
+});
+export const handle = {
+  seo,
+};
+export async function loader({params, context, request}: LoaderArgs) {
   const {handle} = params;
+  const searchParams = new URL(request.url).searchParams;
+  const cursor = searchParams.get('cursor');
+
   const {collection} = await context.storefront.query<any>(COLLECTION_QUERY, {
     variables: {
       handle,
+      cursor,
     },
   });
 
@@ -17,16 +29,12 @@ export async function loader({params, context}: LoaderArgs) {
     collection,
   });
 }
-
-const seo = ({data}: any) => ({
-  title: data?.collection?.title,
-  description: data?.collection?.description,
-});
-
-export const handle = {
-  seo,
+export const meta = ({data}: any) => {
+  return {
+    title: data?.collection?.title ?? 'Collection',
+    description: data?.collection?.description,
+  };
 };
-
 export default function Collection() {
   const {collection} = useLoaderData();
   return (
@@ -46,15 +54,52 @@ export default function Collection() {
           </div>
         )}
       </header>
+      <ProductGrid
+        collection={collection}
+        url={`/collections/${collection.handle}`}
+      />
     </>
   );
 }
+
 const COLLECTION_QUERY = `#graphql
-  query CollectionDetails($handle: String!) {
+  query CollectionDetails($handle: String!, $cursor: String) {
     collection(handle: $handle) {
+      id
       title
       description
       handle
+      products(first: 8, after: $cursor) {
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        nodes {
+          id
+          title
+          publishedAt
+          handle
+          variants(first: 1) {
+            nodes {
+              id
+              image {
+                url
+                altText
+                width
+                height
+              }
+              price {
+                amount
+                currencyCode
+              }
+              compareAtPrice {
+                amount
+                currencyCode
+              }
+            }
+          }
+        }
+      }
     }
   }
 `;
